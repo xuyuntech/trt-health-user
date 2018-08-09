@@ -14,7 +14,7 @@
 ################################################################################
 Profiles:
 
-    OrdererGenesis:
+    TwoOrgsOrdererGenesis:
         Orderer:
             <<: *OrdererDefaults
             Organizations:
@@ -22,14 +22,14 @@ Profiles:
         Consortiums:
             SampleConsortium:
                 Organizations:
-                    - *Trt
+                    - *Org1
                     # - *Org2
-    Channel:
+    TwoOrgsChannel:
         Consortium: SampleConsortium
         Application:
             <<: *ApplicationDefaults
             Organizations:
-                - *Trt
+                - *Org1
                 # - *Org2
 
 ################################################################################
@@ -53,23 +53,23 @@ Organizations:
         ID: OrdererMSP
 
         # MSPDir is the filesystem path which contains the MSP configuration
-        MSPDir: crypto-config/ordererOrganizations/xuyuntech.com/msp
+        MSPDir: crypto-config/ordererOrganizations/example.com/msp
 
-    - &Trt
+    - &Org1
         # DefaultOrg defines the organization which is used in the sampleconfig
         # of the fabric.git development environment
-        Name: TrtMSP
+        Name: Org1MSP
 
         # ID to load the MSP definition as
-        ID: TrtMSP
+        ID: Org1MSP
 
-        MSPDir: crypto-config/peerOrganizations/trt.xuyuntech.com/msp
+        MSPDir: crypto-config/peerOrganizations/org1.example.com/msp
 
         AnchorPeers:
             # AnchorPeers defines the location of peers which can be used
             # for cross org gossip communication.  Note, this value is only
             # encoded in the genesis block in the Application section context
-            - Host: peer0.trt.xuyuntech.com
+            - Host: peer0.org1.example.com
               Port: 7051
 
     # - &Org2
@@ -104,7 +104,7 @@ Orderer: &OrdererDefaults
     OrdererType: solo
 
     Addresses:
-        - orderer.xuyuntech.com:7050
+        - orderer.example.com:7050
 
     # Batch Timeout: The amount of time to wait before creating a batch
     BatchTimeout: 2s

@@ -28,6 +28,10 @@ composer: importAdmin install-network
 	composer card import -f ComposerAdmin@trt-health.card
 	composer network ping -c ComposerAdmin@trt-health
 
+postgres:
+	docker rm -f postgres || true
+	docker run -d --name postgres -p 5432:5432 -e POSTGRES_USER=fabric -e POSTGRES_PASSWORD=fabricpw -e POSTGRES_DB=fabric_ca postgres:9-alpine
+
 rest-server:
 	composer-rest-server -c ComposerAdmin@trt-health -n never -w true
 

@@ -160,7 +160,7 @@ registry:
 #############################################################################
 db:
   type: postgres
-  datasource: host=postgres port=5432 user=fabric password=fabricpw dbname=fabric_ca sslmode=disable
+  datasource: host=192.168.1.110 port=5432 user=fabric password=fabricpw dbname=fabric_ca sslmode=disable
   tls:
       enabled: false
       certfiles:
@@ -251,7 +251,7 @@ ldap:
 affiliations:
     com:
       xuyuntech:
-        - trt
+        - Org1
 
 #############################################################################
 #  Signing section

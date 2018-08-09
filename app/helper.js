@@ -90,6 +90,7 @@ var getRegisteredUser = async function(username, password, userOrg, isJson) {
 				enrollmentID: username,
 				enrollmentSecret: password || (username+'pw'),
 				affiliation: 'com.xuyuntech.'+userOrg.toLowerCase()
+				// affiliation: userOrg.toLowerCase() + '.department1'
 			}, adminUserObj);
 			logger.debug('Successfully got the secret for user %s, pass %s',username, secret);
 			user = await client.setUserContext({username:username, password:secret});

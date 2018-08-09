@@ -44,11 +44,11 @@ channels:
     # operational decisions to share loads from applications among the orderers.  The values must
     # be "names" of orgs defined under "organizations/peers"
     orderers:
-      - orderer.xuyuntech.com
+      - orderer.example.com
 
     # Required. list of peers from participating orgs
     peers:
-      peer0.trt.xuyuntech.com:
+      peer0.org1.example.com:
         # [Optional]. will this peer be sent transaction proposals for endorsement? The peer must
         # have the chaincode installed. The app can also use this property to decide which peers
         # to send the chaincode install request. Default: true
@@ -68,6 +68,24 @@ channels:
         # Default: true
         eventSource: true
 
+      # peer1.org1.example.com:
+      #   endorsingPeer: false
+      #   chaincodeQuery: true
+      #   ledgerQuery: true
+      #   eventSource: false
+
+      # peer0.org2.example.com:
+      #   endorsingPeer: true
+      #   chaincodeQuery: true
+      #   ledgerQuery: true
+      #   eventSource: true
+
+      # peer1.org2.example.com:
+      #   endorsingPeer: false
+      #   chaincodeQuery: true
+      #   ledgerQuery: true
+      #   eventSource: false
+
     # [Optional]. what chaincodes are expected to exist on this channel? The application can use
     # this information to validate that the target peers are in the expected state by comparing
     # this list with the query results of getInstalledChaincodes() and getInstantiatedChaincodes()
@@ -79,12 +97,12 @@ channels:
 # list of participating organizations in this network
 #
 organizations:
-  Trt:
-    mspid: TrtMSP
+  Org1:
+    mspid: Org1MSP
 
     peers:
-      - peer0.trt.xuyuntech.com
-      # - peer1.org1.example.com
+      - peer0.org1.example.com
+      - peer1.org1.example.com
 
     # [Optional]. Certificate Authorities issue certificates for identification purposes in a Fabric based
     # network. Typically certificates provisioning is done in a separate process outside of the
@@ -92,7 +110,7 @@ organizations:
     # dynamic certificate management (enroll, revoke, re-enroll). The following section is only for
     # Fabric-CA servers.
     certificateAuthorities:
-      - ca-trt
+      - ca-org1
 
     # [Optional]. If the application is going to make requests that are reserved to organization
     # administrators, including creating/updating channels, installing/instantiating chaincodes, it
@@ -102,9 +120,9 @@ organizations:
     # this way. The SDK should allow applications to set the org admin identity via APIs, and only use
     # this route as an alternative when it exists.
     adminPrivateKey:
-      path: artifacts/channel/crypto-config/peerOrganizations/trt.xuyuntech.com/users/Admin@trt.xuyuntech.com/msp/keystore/8e12c2c5efb8facfc6d71c565b518d24612cad684c0f2cb4b9506b49ebd89b68_sk
+      path: artifacts/channel/crypto-config/peerOrganizations/org1.example.com/users/Admin@org1.example.com/msp/keystore/5e913f8f0b53e0976a767ae23db2da63779fdc3f03a08617c71405ec50fcdfc3_sk
     signedCert:
-      path: artifacts/channel/crypto-config/peerOrganizations/trt.xuyuntech.com/users/Admin@trt.xuyuntech.com/msp/signcerts/Admin@trt.xuyuntech.com-cert.pem
+      path: artifacts/channel/crypto-config/peerOrganizations/org1.example.com/users/Admin@org1.example.com/msp/signcerts/Admin@org1.example.com-cert.pem
 
   # the profile will contain public information about organizations other than the one it belongs to.
   # These are necessary information to make transaction lifecycles work, including MSP IDs and
@@ -129,24 +147,24 @@ organizations:
 # SDK is implementation specific. Consult each SDK's documentation for its handling of orderers.
 #
 orderers:
-  orderer.xuyuntech.com:
+  orderer.example.com:
     url: grpcs://localhost:7050
 
     # these are standard properties defined by the gRPC library
     # they will be passed in as-is to gRPC client constructor
     grpcOptions:
-      ssl-target-name-override: orderer.xuyuntech.com
+      ssl-target-name-override: orderer.example.com
       grpc-max-send-message-length: 15
 
     tlsCACerts:
-      path: artifacts/channel/crypto-config/ordererOrganizations/xuyuntech.com/orderers/orderer.xuyuntech.com/tls/ca.crt
+      path: artifacts/channel/crypto-config/ordererOrganizations/example.com/orderers/orderer.example.com/tls/ca.crt
 
 #
 # List of peers to send various requests to, including endorsement, query
 # and event listener registration.
 #
 peers:
-  peer0.trt.xuyuntech.com:
+  peer0.org1.example.com:
     # this URL is used to send endorsement and query requests
     url: grpcs://localhost:7051
 
@@ -154,9 +172,9 @@ peers:
     eventUrl: grpcs://localhost:7053
 
     grpcOptions:
-      ssl-target-name-override: peer0.trt.xuyuntech.com
+      ssl-target-name-override: peer0.org1.example.com
     tlsCACerts:
-      path: artifacts/channel/crypto-config/peerOrganizations/trt.xuyuntech.com/peers/peer0.trt.xuyuntech.com/tls/ca.crt
+      path: artifacts/channel/crypto-config/peerOrganizations/org1.example.com/peers/peer0.org1.example.com/tls/ca.crt
 
   # peer1.org1.example.com:
   #   url: grpcs://localhost:7056
@@ -188,14 +206,14 @@ peers:
 # Certificate Authority instead of Fabric-CA, in which case this section would not be specified.
 #
 certificateAuthorities:
-  ca-trt:
+  ca-org1:
     url: https://localhost:7054
     # the properties specified under this object are passed to the 'http' client verbatim when
     # making the request to the Fabric-CA server
     httpOptions:
       verify: false
     tlsCACerts:
-      path: artifacts/channel/crypto-config/peerOrganizations/trt.xuyuntech.com/ca/ca.trt.xuyuntech.com-cert.pem
+      path: artifacts/channel/crypto-config/peerOrganizations/org1.example.com/ca/ca.org1.example.com-cert.pem
 
     # Fabric-CA supports dynamic user enrollment via REST APIs. A "root" user, a.k.a registrar, is
     # needed to enroll and invoke new users.
@@ -203,7 +221,7 @@ certificateAuthorities:
       - enrollId: admin
         enrollSecret: adminpw
     # [Optional] The optional name of the CA.
-    caName: ca-trt
+    caName: ca-org1
 
   # ca-org2:
   #   url: https://localhost:8054

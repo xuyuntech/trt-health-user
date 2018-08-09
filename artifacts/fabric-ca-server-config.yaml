@@ -123,18 +123,30 @@ registry:
 
   # Contains identity information which is used when LDAP is disabled
   identities:
-     - name: admin
-       pass: adminpw
-       type: client
-       affiliation: ""
-       attrs:
-          hf.Registrar.Roles: "peer,orderer,client,user"
-          hf.Registrar.DelegateRoles: "peer,orderer,client,user"
-          hf.Revoker: true
-          hf.IntermediateCA: true
-          hf.GenCRL: true
-          hf.Registrar.Attributes: "*"
-          hf.AffiliationMgr: true
+    - name: admin
+      pass: adminpw
+      type: client
+      affiliation: ""
+      attrs:
+        hf.Registrar.Roles: "peer,orderer,client,user"
+        hf.Registrar.DelegateRoles: "peer,orderer,client,user"
+        hf.Revoker: true
+        hf.IntermediateCA: true
+        hf.GenCRL: true
+        hf.Registrar.Attributes: "*"
+        hf.AffiliationMgr: true
+    # - name: PeerAdmin
+    #   pass: adminpw
+    #   type: client
+    #   affiliation: ""
+    #   attrs:
+    #     hf.Registrar.Roles: "peer,orderer,client,user"
+    #     hf.Registrar.DelegateRoles: "peer,orderer,client,user"
+    #     hf.Revoker: true
+    #     hf.IntermediateCA: true
+    #     hf.GenCRL: true
+    #     hf.Registrar.Attributes: "*"
+    #     hf.AffiliationMgr: true
 
 #############################################################################
 #  Database section

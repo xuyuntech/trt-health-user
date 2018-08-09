@@ -10,5 +10,8 @@ Thumbs.db
 node_modules
 fabric-client-kv-*
 db_data
+*.card
+*.bna
+
 
 package-lock.json

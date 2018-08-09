@@ -46,6 +46,11 @@ async function initDB() {
   logger.info('start to init db...');
   try {
     await query(SQL_CREATE_TABLE);
+    // create admin user
+    const {rows} = await query('select id from user_bind where username=$1', ['admin']);
+    if (rows.length !== 1) {
+      await await query('INSERT INTO user_bind(username) VALUES($1) RETURNING id', ['admin']);
+    }
   } catch (e) {
     logger.error('create table user_bind err: %s', e);
     return;
@@ -69,7 +74,15 @@ async function migrateDB() {
   }
 }
 // type: PHONE|EMAIL|USERNAME|WX_OPENID
-async function createUser({type, value = null, nickname = null}) {
+async function createUser({phone, email, wx_openid, username, nickname}){
+  try {
+    const {rows} = await query(SQL_INSERT_USER_BIND, [phone, email, nickname, wx_openid, username]);
+    return rows[0].id;
+  } catch (err) {
+    throw err;
+  }
+}
+async function createUser1({type, value = null, nickname = null}) {
   logger.info(`create user for type: ${type}, value: ${value}, nickname: ${nickname}`);
   let phone = null;
   let email = null;
@@ -85,12 +98,9 @@ async function createUser({type, value = null, nickname = null}) {
     default:
   }
   try {
-    await query('BEGIN');
     const {rows} = await query(SQL_INSERT_USER_BIND, [phone, email, nickname, wx_openid, username]);
-    await query('COMMIT');
     return rows[0].id;
   } catch (err) {
-    await query('ROLLBACK');
     throw err;
   }
   return null;

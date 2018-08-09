@@ -24,7 +24,7 @@ var createChannel = async function(channelName, channelConfigPath, username, org
 	logger.debug('\n====== Creating Channel \'' + channelName + '\' ======\n');
 	try {
 		// first setup the client for this org
-		var client = await helper.getClientForOrg(orgName);
+		var client = await helper.getClientForOrg(orgName, username);
 		logger.debug('Successfully got the fabric client for the organization "%s"', orgName);
 
 		// read in the envelope for the channel config raw bytes

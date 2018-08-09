@@ -28,6 +28,8 @@ var expressJWT = require('express-jwt');
 var jwt = require('jsonwebtoken');
 var bearerToken = require('express-bearer-token');
 var cors = require('cors');
+const redis = require('redis');
+const bcrypt = require('bcrypt');
 
 const db = require('./db');
 const bfetch = require('./bfetch');
@@ -47,10 +49,64 @@ var port = process.env.PORT || hfc.getConfigSetting('port');
 
 const clientID = process.env.WX_CLIENTID;
 const clientSecret = process.env.WX_CLIENT_SECRET;
+const redisURL = process.env.REDIS_URL;
 
+if (!clientID || !clientSecret) {
+	logger.error('clientID and clientSecret does not set.');
+	process.exit(1);
+}
+
+let redisClient = null;
+
+async function createRedisClient() {
+	return new Promise((resolve, reject) => {
+		if (redisClient) {
+			resolve(redisClient);
+			return;
+		}
+		const client = redis.createClient(redisURL, {
+			retry_strategy: function(options) {
+				if (options.error && options.error.code === 'ECONNREFUSED') {
+					return new Error('The server refused the connection');
+				}
+				if (options.total_retry_time > 1000 * 60 * 60) {
+					return new Error('Retry time exhausted');
+				}
+				if (options.attempt > 10) {
+					return undefined;
+				}
+				return Math.min(options.attempt * 100, 3000);
+			}
+		});
+		client.on('error', function(error) {
+			logger.error('redis connect err: ', error);
+			redisClient = null;
+			reject(error);
+		})
+		client.on('end', function() {
+			redisClient = null;
+			logger.debug('redis end.');
+			reject('redis end');
+		});
+		client.on('ready', function(){
+			logger.info('redis connected.');
+			client.select('1', function(error){
+				if (error) {
+					logger.error('redis select db err: ', error);
+					process.exit(1);
+					return;
+				}
+				redisClient = client;
+				resolve(client);
+			})
+		});
+	});
+}
+createRedisClient();
 ///////////////////////////////////////////////////////////////////////////////
 //////////////////////////////// SET CONFIGURATONS ////////////////////////////
 ///////////////////////////////////////////////////////////////////////////////
+const urlsIgnoreAuth = ['/users', '/users/login', '/users/verifyCode'];
 app.options('*', cors());
 app.use(cors());
 //support parsing of application/json type post data
@@ -64,13 +120,15 @@ app.set('secret', 'thisismysecret');
 app.use(expressJWT({
 	secret: 'thisismysecret'
 }).unless({
-	path: ['/users', '/user/login']
+	path: urlsIgnoreAuth
 }));
 app.use(bearerToken());
 app.use(function(req, res, next) {
 	logger.debug(' ------>>>>>> new request for %s',req.originalUrl);
-	if (req.originalUrl.indexOf('/users') >= 0
-		|| req.originalUrl.indexOf('/user/login') >= 0
+	if (urlsIgnoreAuth.indexOf(req.path) >= 0
+		// req.originalUrl.indexOf('/users') >= 0
+		// || req.originalUrl.indexOf('/user/login') >= 0
+		// || req.originalUrl.indexOf('/users/verifyCode') >= 0
 	) {
 		return next();
 	}
@@ -106,10 +164,10 @@ logger.info('****************** SERVER STARTED ************************');
 logger.info('***************  http://%s:%s  ******************',host,port);
 server.timeout = 240000;
 
-function getErrorMessage(field) {
+function getErrorMessage(msg) {
 	var response = {
-		success: false,
-		message: field + ' field is missing or Invalid in the request'
+		status: 1,
+		message: msg
 	};
 	return response;
 }
@@ -117,63 +175,377 @@ function getErrorMessage(field) {
 ///////////////////////////////////////////////////////////////////////////////
 ///////////////////////// REST ENDPOINTS START HERE ///////////////////////////
 ///////////////////////////////////////////////////////////////////////////////
-// API 绑定手机号，通过 token 获取用户 id
-// API 更新微信 openid，通过 token 获取用户 id
-// API 注册用户，1. 通过手机号， 2. 通过微信，返回 token
-app.post('/users', async function(req, res) {
-	const { type } = req.query;
-	const { phone, orgName, wx_code } = req.body;
-	logger.debug(`End point : /users?type=${type} [wx_code ${wx_code}, orgname ${orgName}, phone ${phone}]`);
-	if (type === 'phone' && !phone) {
-		res.json(getErrorMessage('\'phone\''));
-		return;
-	} else
-	if (type === 'wx_code' && !wx_code) {
-		res.json(getErrorMessage('\'wx_code\''));
+app.post('/users/verifyCode', async function(req, res){
+	const { phone } = req.body;
+	if (!/^1\d{10}$/.test(phone)) {
+		res.json(getErrorMessage('phone'));
 		return;
 	}
-	if (!orgName) {
-		res.json(getErrorMessage('\'orgName\''));
-		return;
-	}
-	let user_id = null;
+	const code = `${Math.round(Math.random()*1000000)}`;
 	try {
-		if (type === 'phone') {
-			user_id = await db.createUser({
-				type: 'PHONE',
-				value: phone,
+		// todo 发短信
+		// 存储 code 到 redis
+		const client = await createRedisClient();
+		client.set(phone, code, 'EX', 60 * 5, function(err) {
+			if (err) {
+				res.json({
+					status: 1,
+					err,
+				})
+				return;
+			}
+			res.json({
+				status:0,
+				code,
 			});
-		}
-		if (type === 'wechat') {
-			// 通过 wx_code 去访问 微信后台 获取 openid
-			const {openid, session_key} = await bfetch(`https://api.weixin.qq.com/sns/jscode2session?appid=${clientID}&secret=${clientSecret}&js_code=${wx_code}&grant_type=authorization_code`)
-			user_id = await db.createUser({
-				type: 'WX_OPENID',
-				value: openid,
-			});
-		}
-	} catch(e) {
-		logger.error('API[/users] create user err: ', e);
+		});
+	} catch (e) {
+		logger.error('send verifyCode err: ', e);
 		res.json({
 			status: 1,
 			err: e,
 		});
+	}
+});
+async function checkVerifyCode(phone, code) {
+	return new Promise(async (resolve, reject) => {
+		const client = await createRedisClient();
+		client.get(phone, function(err, reply){
+			console.log('---->', err, reply, arguments);
+			if (err) {
+				reject(err);
+				return;
+			}
+			resolve(reply);
+		});
+	});
+}
+// API 绑定手机号，通过 token 获取用户 id
+// API 更新微信 openid，通过 token 获取用户 id
+// API 注册用户，1. 通过手机号， 2. 通过微信，返回 token
+app.post('/users/login', async function(req, res) {
+	const { type } = req.query;
+	const { username, password, phone, verifyCode, orgName, wx_code } = req.body;
+	let uname = null;
+	if (!orgName) {
+		res.json(getErrorMessage('请提供组织名称'));
 		return;
 	}
-	var token = jwt.sign({
+	try {
+		switch(type) {
+			case 'password':
+			{
+				if (!username) {
+					res.json(getErrorMessage('请输入用户名'));
+					return;
+				}
+				if (!password) {
+					res.json(getErrorMessage('请输入密码'));
+					return;
+				}
+				const { rows } = await db.query(`select username from user_bind where username=$1`, [username]);
+				if (rows.length !== 1) {
+					res.json({
+						status: 1,
+						err: `账号 ${username} 不存在`
+					});
+					return;
+				}
+				uname = rows[0].username;
+				const usersResult = await db.query('select id,token from users where id=$1', [username])
+				if (usersResult&&usersResult.rows&&usersResult.rows.length !== 1) {
+					res.json({
+						status: 1,
+						err: `账号 ${username} 不存在链上数据`
+					});
+					return;
+				}
+				const passwordHashed = String(usersResult.rows[0].token);
+				const ok = await bcrypt.compare(password, passwordHashed)
+				if (!ok) {
+					res.json({
+						status: 1,
+						err: '用户名密码不匹配'
+					});
+					return;
+				}
+				break;
+			}
+			case 'phone':
+			{
+				if (!phone) {
+					res.json(getErrorMessage('请输入手机号'));
+					return;
+				}
+				if (!verifyCode) {
+					res.json(getErrorMessage('请输入 6 位验证码'));
+					return;
+				}
+				const { rows } = await db.query(`select id from user_bind where phone=$1`, [phone]);
+				if (rows.length !== 1) {
+					res.json({
+						status: 1,
+						err: `账号 ${phone} 不存在`
+					});
+					return;
+				}
+				uname = rows[0].username;
+				if (`${verifyCode}` !== await checkVerifyCode(phone)) {
+					res.json({
+						status: 1,
+						err: '验证码不正确'
+					});
+				}
+				break;
+			}
+			case 'wx':
+			{
+				break;
+			}
+		}
+
+		if (!uname) {
+			res.json({
+				status: 1,
+				err: '登录失败, 未获取到用户'
+			});
+			return;
+		}
+		res.json({
+			status: 0,
+			result: {
+				token: generateToken({ username: uname, orgName }, app.get('secret')),
+			}
+		});
+	} catch (e) {
+		res.json({
+			status: 1,
+			err: `${e}`
+		})
+	}
+});
+function generateToken({
+	username,
+	orgName
+}, secret) {
+	logger.debug('generateToken username: %s, orgName: %s', username, orgName);
+	return jwt.sign({
 		exp: Math.floor(Date.now() / 1000) + parseInt(hfc.getConfigSetting('jwt_expiretime')),
-		user_id: user_id,
+		username: username,
 		orgName: orgName
-	}, app.get('secret'));
-	let response = await helper.getRegisteredUser(user_id, orgName, true);
-	logger.debug('-- returned from registering the user_id %s phone %s for organization %s',user_id, phone,orgName);
-	if (response && typeof response !== 'string') {
-		logger.debug('Successfully registered the user_id %s phone %s for organization %s',user_id, phone,orgName);
-		response.token = token;
-		res.json(response);
+	}, secret);
+}
+async function registerUser(regData){
+	const { phone = null, email = null, wx_openid = null, username = null, password, nickname = null, orgName } = regData;
+	try {
+		await db.query('BEGIN');
+		const {rows} = await db.query('INSERT INTO user_bind(phone,email,nickname,wx_openid,username) VALUES($1,$2,$3,$4,$5) RETURNING username', [phone, email, nickname, wx_openid, username]);
+		if (rows.length !== 1) {
+			throw new Error(`insert err: ${rows}`);
+		}
+		const uname = rows[0].username;
+		let response = await helper.getRegisteredUser(uname, password, orgName, true);
+		logger.debug('-- returned from registering the username %s phone %s for organization %s',uname, phone,orgName);
+		if (response && typeof response !== 'string') {
+			logger.debug('Successfully registered the username %s phone %s for organization %s',uname, phone,orgName);
+			await db.query('COMMIT');
+			return uname;
+		} else {
+			logger.debug('Failed to register the username %s phone %s for organization %s with::%s',uname, phone,orgName,response);
+			throw response;
+		}
+	} catch (e) {
+		await db.query('ROLLBACK');
+		throw e;
+	}
+}
+app.post('/users', async function(req, res) {
+	const { type } = req.query;
+	const { username, password, phone, verifyCode, orgName, wx_code } = req.body;
+	let regData = null;
+	let tName = null;
+	let tValue = null;
+	switch(type) {
+		case 'password':
+			//todo validation username and password
+			if (!username) {
+				res.json(getErrorMessage('请输入用户名'));
+				return;
+			}
+			if (!password) {
+				res.json(getErrorMessage('请输入密码'));
+				return;
+			}
+			regData = {
+				username,
+				password,
+				orgName,
+			};
+			tName = 'username';
+			tValue = username;
+			break;
+		case 'phone': {
+			// check verifyCode
+			if (!phone) {
+				res.json(getErrorMessage('请输入手机号'));
+				return;
+			}
+			if (!verifyCode || verifyCode.length !== 6) {
+				res.json(getErrorMessage('请输入 6 位验证码'));
+				return;
+			}
+			if (`${verifyCode}` !== await checkVerifyCode(phone)) {
+				res.json({
+					status: 1,
+					err: '验证码不正确'
+				});
+				return;
+			}
+			regData = {
+				phone,
+				username: phone,
+				orgName,
+			};
+			tName = 'phone';
+			tValue = phone;
+			break;
+		}
+		case 'wx': {
+			if (!wx_code) {
+				res.json(getErrorMessage('请提供微信验证编码 code'));
+				return;
+			}
+			const {openid, session_key} = await bfetch(`https://api.weixin.qq.com/sns/jscode2session?appid=${clientID}&secret=${clientSecret}&js_code=${wx_code}&grant_type=authorization_code`)
+			regData = {
+				wx_openid: openid,
+				orgName,
+			};
+			tName = 'wx_openid';
+			tValue = openid;
+			break;
+		}
+		default:
+			res.json({
+				status: 1,
+				err: '注册类型错误'
+			});
+			return;
+	}
+
+	try {
+		const { rows } = await db.query(`select id from user_bind where ${tName}=$1`, [tValue]);
+		if (rows.length >= 1) {
+			res.json({
+				status: 1,
+				err: `用户 ${tValue} 已经注册`
+			});
+			return;
+		}
+		const uname = await registerUser(regData);
+		const token = generateToken({username: uname, orgName}, app.get('secret'));
+		res.json({
+			status: 0,
+			result: {
+				token,
+			},
+		});
+	} catch(e) {
+		res.json({
+			status: 1,
+			err: `${e}`
+		});
+	}
+});
+
+app.post('/users1', async function(req, res) {
+	const { type } = req.query;
+	const { phone, verifyCode, orgName, wx_code, username, password } = req.body;
+	logger.debug(`End point : /users?type=${type} [orgname ${orgName}, phone ${phone}]`);
+	let fieldName = 'phone';
+	let tType = 'PHONE';
+	let tValue = phone;
+	if (type === 'phone') {
+		if (!phone) {
+			res.json(getErrorMessage('\'phone\''));
+			return;
+		}
+		// check verifyCode
+		if (`${verifyCode}` !== await checkVerifyCode(phone)) {
+			res.json({
+				status: 1,
+				err: '验证码不正确'
+			});
+			return;
+		}
+		fieldName = 'phone';
+		tType = 'PHONE';
+		tValue = phone;
+	}else if (type === 'password') {
+		tType = 'PASSWORD';
+		fieldName = 'username';
+		tValue = username;
+	} else if (type === 'wechat') {
+		if (!wx_code) {
+			res.json(getErrorMessage('\'wx_code\''));
+			return;
+		}
+		fieldName = 'wx_openid';
+		tType = 'WX_OPENID';
 	} else {
-		logger.debug('Failed to register the user_id %s phone %s for organization %s with::%s',user_id, phone,orgName,response);
-		res.json({success: false, message: response});
+		res.json({
+			status: 400,
+			err: 'type 参数错误'
+		});
+		return;
+	}
+
+	if (!orgName) {
+		res.json(getErrorMessage('\'orgName\''));
+		return;
+	}
+	
+	let user_id = null;
+	try {
+		// if tType is WX_OPENID, then fetch openid from wechat by wx_code.
+		if (tType === 'WX_OPENID') {
+			// 通过 wx_code 去访问 微信后台 获取 openid
+			const {openid, session_key} = await bfetch(`https://api.weixin.qq.com/sns/jscode2session?appid=${clientID}&secret=${clientSecret}&js_code=${wx_code}&grant_type=authorization_code`)
+			tValue = openid;
+		}
+		const { rows } = await db.query(`select id from user_bind where ${fieldName}=$1`, [tValue]);
+		await db.query('BEGIN');
+		if (rows.length < 1) {
+			user_id = await db.createUser({
+				type: tType,
+				value: tValue,
+			});
+		} else {
+			user_id = rows[0].id;
+		}
+		var token = jwt.sign({
+			exp: Math.floor(Date.now() / 1000) + parseInt(hfc.getConfigSetting('jwt_expiretime')),
+			user_id: user_id,
+			orgName: orgName
+		}, app.get('secret'));
+		let response = await helper.getRegisteredUser(user_id, orgName, true);
+		logger.debug('-- returned from registering the user_id %s phone %s for organization %s',user_id, phone,orgName);
+		if (response && typeof response !== 'string') {
+			logger.debug('Successfully registered the user_id %s phone %s for organization %s',user_id, phone,orgName);
+			response.token = token;
+			await db.query('COMMIT');
+			res.json(response);
+		} else {
+			logger.debug('Failed to register the user_id %s phone %s for organization %s with::%s',user_id, phone,orgName,response);
+			throw response;
+		}
+	} catch(e) {
+		await db.query('ROLLBACK');
+		logger.error('API[/users] create user err: ', e);
+		res.json({
+			status: 1,
+			err: `${e}`,
+		});
+		return;
 	}
 
 });

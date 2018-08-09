@@ -1,0 +1,91 @@
+{
+  "name":"trt-health",
+  "x-type":"hlfv1",
+  "version":"1.0.0",
+  "peers": {
+    "peer0.trt.xuyuntech.com": {
+      "url": "grpcs://peer0.trt.xuyuntech.com:7051",
+      "eventUrl": "grpcs://peer0.trt.xuyuntech.com:7053",
+      "grpcOptions": {
+        "ssl-target-name-override": "peer0.trt.xuyuntech.com"
+      },
+      "tlsCACerts": {
+        "path": "artifacts/channel/crypto-config/peerOrganizations/trt.xuyuntech.com/peers/peer0.trt.xuyuntech.com/tls/ca.crt"
+      }
+    }
+  },
+  "certificateAuthorities": {
+    "ca-trt": {
+      "url": "https://ca.trt.xuyuntech.com:7054",
+      "caName": "ca-trt",
+      "httpOptions": {
+        "verify": false
+      },
+      "tlsCACerts": {
+        "path": "artifacts/channel/crypto-config/peerOrganizations/trt.xuyuntech.com/ca/ca.trt.xuyuntech.com-cert.pem"
+      },
+      "registrar": [
+        {
+          "enrollId": "admin",
+          "enrollSecret": "adminpw"
+        }
+      ]
+    }
+  },
+  "orderers": {
+    "orderer.xuyuntech.com": {
+      "url": "grpcs://orderer.xuyuntech.com:7050",
+      "grpcOptions": {
+        "ssl-target-name-override": "orderer.xuyuntech.com",
+        "grpc-max-send-message-length": 15
+      },
+      "tlsCACerts": {
+        "path": "artifacts/channel/crypto-config/ordererOrganizations/xuyuntech.com/orderers/orderer.xuyuntech.com/tls/ca.crt"
+      }
+    }
+  },
+  "organizations": {
+    "Trt": {
+      "mspid": "TrtMSP",
+      "peers": [
+        "peer0.trt.xuyuntech.com"
+      ],
+      "certificateAuthorities": [
+        "ca-trt"
+      ],
+      "adminPrivateKey": {
+        "path": "artifacts/channel/crypto-config/peerOrganizations/trt.xuyuntech.com/users/Admin@trt.xuyuntech.com/msp/keystore/8e12c2c5efb8facfc6d71c565b518d24612cad684c0f2cb4b9506b49ebd89b68_sk"
+      },
+      "signedCert": {
+        "path": "artifacts/channel/crypto-config/peerOrganizations/trt.xuyuntech.com/users/Admin@trt.xuyuntech.com/msp/signcerts/Admin@trt.xuyuntech.com-cert.pem"
+      }
+    }
+  },
+  "channels": {
+    "composerchannel": {
+      "orderers": [
+        "orderer.xuyuntech.com"
+      ],
+      "peers": {
+        "peer0.trt.xuyuntech.com": {
+          "endorsingPeer": true,
+          "chaincodeQuery": true,
+          "eventSource": true
+        }
+      }
+    }
+  },
+  "client": {
+    "organization": "Trt",
+    "connection": {
+      "timeout": {
+        "peer": {
+          "endorser": "300",
+          "eventHub": "300",
+          "eventReg": "300"
+        },
+        "orderer": "300"
+      }
+    }
+  }
+}

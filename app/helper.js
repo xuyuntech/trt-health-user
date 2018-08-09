@@ -71,7 +71,7 @@ async function getClientForOrg (userorg, username) {
 	return client;
 }
 
-var getRegisteredUser = async function(username, userOrg, isJson) {
+var getRegisteredUser = async function(username, password, userOrg, isJson) {
 	try {
 		var client = await getClientForOrg(userOrg);
 		logger.debug('Successfully initialized the credential stores');
@@ -88,7 +88,7 @@ var getRegisteredUser = async function(username, userOrg, isJson) {
 			let caClient = client.getCertificateAuthority();
 			let secret = await caClient.register({
 				enrollmentID: username,
-				enrollmentSecret: username+'pw',
+				enrollmentSecret: password || (username+'pw'),
 				affiliation: 'com.xuyuntech.'+userOrg.toLowerCase()
 			}, adminUserObj);
 			logger.debug('Successfully got the secret for user %s, pass %s',username, secret);

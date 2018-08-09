@@ -21,7 +21,7 @@ services:
       - "7054:7054"
     command: sh -c 'fabric-ca-server start -b admin:adminpw -d'
     volumes:
-      - ./fabric-ca-server-config.yaml:/etc/hyperledger/fabric-ca-server/fabric-ca-server-config.yaml
+      # - ./fabric-ca-server-config.yaml:/etc/hyperledger/fabric-ca-server/fabric-ca-server-config.yaml
       - ./channel/crypto-config/peerOrganizations/trt.xuyuntech.com/ca/:/etc/hyperledger/fabric-ca-server-config
     container_name: ca
     depends_on:
@@ -86,6 +86,8 @@ services:
       - CORE_PEER_ID=peer0.trt.xuyuntech.com
       - CORE_PEER_LOCALMSPID=TrtMSP
       - CORE_PEER_ADDRESS=peer0.trt.xuyuntech.com:7051
+      - CORE_LEDGER_STATE_STATEDATABASE=CouchDB
+      - CORE_LEDGER_STATE_COUCHDBCONFIG_COUCHDBADDRESS=couchdb:5984
     ports:
       - 7051:7051
       - 7053:7053
@@ -93,7 +95,19 @@ services:
         - ./channel/crypto-config/peerOrganizations/trt.xuyuntech.com/peers/peer0.trt.xuyuntech.com/:/etc/hyperledger/crypto/peer
     depends_on:
       - orderer.xuyuntech.com
-
+  couchdb:
+    container_name: couchdb
+    image: hyperledger/fabric-couchdb
+    ports:
+      - 5984:5984
+    # volumes:
+    # - ./db_data:/opt/couchdb/data
+    environment:
+      DB_URL: http://localhost:5984/member_db
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "100m"
   # peer1.trt.xuyuntech.com:
   #   container_name: peer1.org1.example.com
   #   extends:

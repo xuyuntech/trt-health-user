@@ -1,4 +1,4 @@
-import fetch from 'isomorphic-fetch';
+const fetch = require('isomorphic-fetch');
 
 const ErrNotFound = { status: 404, err: 'not found' };
 const ErrNoContent = { status: 204, err: 'no content' };

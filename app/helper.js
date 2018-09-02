@@ -71,6 +71,51 @@ async function getClientForOrg (userorg, username) {
 	return client;
 }
 
+var revokeUser = async function(username, userOrg) {
+	try {
+		const client = await getClientForOrg(userOrg);
+		var user = await client.getUserContext(username, true);
+		if (!user || !user.isEnrolled()) {
+			logger.debug(`${username} has not enrolled yet, ignore.`);
+			return true;
+		}
+		var admins = hfc.getConfigSetting('admins');
+		let adminUserObj = await client.setUserContext({username: admins[0].username, password: admins[0].secret});
+		let caClient = client.getCertificateAuthority();
+		const revokeResult = await caClient.revoke({
+			enrollmentID: username,
+		}, adminUserObj)
+		logger.debug(`revoke user ${username} ok: `, revokeResult)
+	} catch (e) {
+		logger.error(`revoke user ${username} err: `, e);
+		throw e;
+	}
+};
+
+var enrollUser = async function(username, password, userOrg) {
+	try {
+		const client = await getClientForOrg(userOrg);
+		var user = await client.getUserContext(username, true);
+		if (user && user.isEnrolled()) {
+			logger.debug(`${username} has already enrolled.`);
+			return true;
+		}
+		var admins = hfc.getConfigSetting('admins');
+		let adminUserObj = await client.setUserContext({username: admins[0].username, password: admins[0].secret});
+		let caClient = client.getCertificateAuthority();
+		await caClient.enroll({
+			enrollmentID: username,
+			enrollmentSecret: password,
+		}, adminUserObj);
+		const enrollResult = await client.setUserContext({username, password});
+		logger.debug(`${username} enroll successfully. `, enrollResult);
+		return true;
+	} catch (e) {
+		logger.error(`${username} enroll error: ${e}`);
+		throw e;
+	}
+};
+
 var getRegisteredUser = async function(username, password, userOrg, isJson) {
 	try {
 		var client = await getClientForOrg(userOrg);
@@ -129,3 +174,5 @@ exports.getClientForOrg = getClientForOrg;
 exports.getLogger = getLogger;
 exports.setupChaincodeDeploy = setupChaincodeDeploy;
 exports.getRegisteredUser = getRegisteredUser;
+exports.enrollUser = enrollUser;
+exports.revokeUser = revokeUser;

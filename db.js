@@ -82,29 +82,6 @@ async function createUser({phone, email, wx_openid, username, nickname}){
     throw err;
   }
 }
-async function createUser1({type, value = null, nickname = null}) {
-  logger.info(`create user for type: ${type}, value: ${value}, nickname: ${nickname}`);
-  let phone = null;
-  let email = null;
-  let wx_openid = null;
-  let username = null;
-  switch(type) {
-    case 'PHONE':
-      phone = value;
-      break;
-    case 'WX_OPENID':
-      wx_openid = value;
-      break;
-    default:
-  }
-  try {
-    const {rows} = await query(SQL_INSERT_USER_BIND, [phone, email, nickname, wx_openid, username]);
-    return rows[0].id;
-  } catch (err) {
-    throw err;
-  }
-  return null;
-}
 
 module.exports = {
   query,

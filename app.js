@@ -175,6 +175,7 @@ function getErrorMessage(msg) {
 ///////////////////////////////////////////////////////////////////////////////
 ///////////////////////// REST ENDPOINTS START HERE ///////////////////////////
 ///////////////////////////////////////////////////////////////////////////////
+require('./api')(app);
 app.post('/users/verifyCode', async function(req, res){
 	const { phone } = req.body;
 	if (!/^1\d{10}$/.test(phone)) {
@@ -225,7 +226,7 @@ async function checkVerifyCode(phone, code) {
 // API 注册用户，1. 通过手机号， 2. 通过微信，返回 token
 app.post('/users/login', async function(req, res) {
 	const { type } = req.query;
-	const { username, password, phone, verifyCode, orgName, wx_code } = req.body;
+	const { username, password, phone, orgName, wx_code } = req.body;
 	let uname = null;
 	if (!orgName) {
 		res.json(getErrorMessage('请提供组织名称'));
@@ -251,24 +252,7 @@ app.post('/users/login', async function(req, res) {
 					});
 					return;
 				}
-				uname = rows[0].username;
-				const usersResult = await db.query('select id,token from users where id=$1', [username])
-				if (usersResult&&usersResult.rows&&usersResult.rows.length !== 1) {
-					res.json({
-						status: 1,
-						err: `账号 ${username} 不存在链上数据`
-					});
-					return;
-				}
-				const passwordHashed = String(usersResult.rows[0].token);
-				const ok = await bcrypt.compare(password, passwordHashed)
-				if (!ok) {
-					res.json({
-						status: 1,
-						err: '用户名密码不匹配'
-					});
-					return;
-				}
+				uname = rows[0].username;				
 				break;
 			}
 			case 'phone':
@@ -277,11 +261,11 @@ app.post('/users/login', async function(req, res) {
 					res.json(getErrorMessage('请输入手机号'));
 					return;
 				}
-				if (!verifyCode) {
-					res.json(getErrorMessage('请输入 6 位验证码'));
+				if (!password) {
+					res.json(getErrorMessage('请输入密码'));
 					return;
 				}
-				const { rows } = await db.query(`select id from user_bind where phone=$1`, [phone]);
+				const { rows } = await db.query(`select username from user_bind where phone=$1`, [phone]);
 				if (rows.length !== 1) {
 					res.json({
 						status: 1,
@@ -290,12 +274,6 @@ app.post('/users/login', async function(req, res) {
 					return;
 				}
 				uname = rows[0].username;
-				if (`${verifyCode}` !== await checkVerifyCode(phone)) {
-					res.json({
-						status: 1,
-						err: '验证码不正确'
-					});
-				}
 				break;
 			}
 			case 'wx':
@@ -303,7 +281,6 @@ app.post('/users/login', async function(req, res) {
 				break;
 			}
 		}
-
 		if (!uname) {
 			res.json({
 				status: 1,
@@ -311,6 +288,24 @@ app.post('/users/login', async function(req, res) {
 			});
 			return;
 		}
+		const usersResult = await db.query('select id,token from users where id=$1', [uname])
+		if (usersResult&&usersResult.rows&&usersResult.rows.length !== 1) {
+			res.json({
+				status: 1,
+				err: `账号 ${username} 不存在链上数据`
+			});
+			return;
+		}
+		const passwordHashed = String(usersResult.rows[0].token);
+		const ok = await bcrypt.compare(password, passwordHashed)
+		if (!ok) {
+			res.json({
+				status: 1,
+				err: '用户名密码不匹配'
+			});
+			return;
+		}
+		await helper.enrollUser(uname, password, orgName)
 		res.json({
 			status: 0,
 			result: {
@@ -390,6 +385,10 @@ app.post('/users', async function(req, res) {
 				res.json(getErrorMessage('请输入手机号'));
 				return;
 			}
+			if (!password) {
+				res.json(getErrorMessage('请输入密码'));
+				return;
+			}
 			if (!verifyCode || verifyCode.length !== 6) {
 				res.json(getErrorMessage('请输入 6 位验证码'));
 				return;
@@ -403,6 +402,7 @@ app.post('/users', async function(req, res) {
 			}
 			regData = {
 				phone,
+				password,
 				username: phone,
 				orgName,
 			};
